@@ -49,7 +49,6 @@ class Telemetry:
         a = mantissa / (2 ** 23)
         return ((-1) ** sign) * (1 + a) * (2 ** (exponenta - 127))
 
-
     def receive_array(self):
         #  Receiving an array length
         len = self.read()
@@ -63,6 +62,17 @@ class Telemetry:
 
         #  Receiving and returning an array data
         return [self.read_signed(type) for _ in range(len)]
+
+    def transmit_array(self, arr, type, len):
+        # Transmitting an array length
+        self.write(len)
+
+        # Transmitting an array type
+        self.write(type)
+
+        # Transmitting an array items
+        for item in arr:
+            self.write(item)
 
     def get_data(self, id):
         #  Sending identifier
