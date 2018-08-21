@@ -15,28 +15,30 @@ class Telemetry:
     MINUS     = 33001
     PLUS      = 33002
 
-    def __init__(self, port, baudrate, stopbits=STOPBITS_TWO):
+    def __init__(self, port, baudrate, items, stopbits=STOPBITS_TWO):
         self.ser = Serial(port, baudrate, stopbits=stopbits)
+
+        self.items = items
 
     def close(self):
         self.ser.close()
 
-    def read(self, bytes=1):
-        return int.from_bytes(self.ser.read(bytes), byteorder='big')
+    def _read(self, bytes=1):
+        return int.from_bytes(self.ser._read(bytes), byteorder='big')
 
-    def read_signed(self, bytes=1):
-        sign = self.read(2)
-        res = self.read(bytes)
+    def _read_signed(self, bytes=1):
+        sign = self._read(2)
+        res = self._read(bytes)
         if sign == self.MINUS:
             res *= -1
         return res
 
-    def write(self, data):
-        self.ser.write(struct.pack('>B', data))
+    def _write(self, data):
+        self.ser._write(struct.pack('>B', data))
 
     def receive_float(self):
         #  Receiving raw four-byte data
-        raw_data = self.read(4)
+        raw_data = self._read(4)
 
         #  Getting sign from received raw digit
         sign = raw_data // (2 ** 31) & 0xFF
@@ -51,40 +53,57 @@ class Telemetry:
 
     def receive_array(self):
         #  Receiving an array length
-        len = self.read()
+        len = self._read()
 
         #  Receiving an array type
-        type = self.read()
+        type = self._read()
 
         if type == self.FLOAT:
             #  Receiving and returning an array data
             return [self.receive_float(type) for _ in range(len)]
 
         #  Receiving and returning an array data
-        return [self.read_signed(type) for _ in range(len)]
+        return [self._read_signed(type) for _ in range(len)]
 
     def transmit_array(self, arr, type, len):
         # Transmitting an array length
-        self.write(len)
+        self._write(len)
 
         # Transmitting an array type
-        self.write(type)
+        self._write(type)
 
         # Transmitting an array items
         for item in arr:
-            self.write(item)
+            self._write(item)
+
+    def data_transmit(self, item):
+        self._write(self.START)
+
+        self._write(item.get('type'))
+
+        func = item.get('func')
+        callback = func()
+
+        if item.get('type') == self.FLOAT:
+            self._write(callback)
+        elif item.get('type') == self.ARRAY:
+            self.transmit_array(callback, 
+                                callback.get('type'),
+                                len(callback))
+        else:
+            self._write(callback)
 
     def get_data(self, id):
         #  Sending identifier
-        self.write(id)
+        self._write(id)
 
         #  Receiving start identifier
-        start = self.read(2)
+        start = self._read(2)
         if start != self.START:
             return None
 
         #  Receiving type identifier
-        type = self.read()
+        type = self._read()
 
         #  Receiving data
         if type == self.ARRAY:
@@ -92,5 +111,5 @@ class Telemetry:
         elif type == self.FLOAT:
             data = self.receive_float()
         else:
-            data = self.read_signed(type)
+            data = self._read_signed(type)
         return data
